@@ -19,7 +19,8 @@ Arrêt à un niveau : STOP_LEVEL=29 dans .env (ou --stop-level 29). Le niveau es
 relu avant chaque combat ; les combats déjà en cours se terminent quand même.
 Une fois l'arrêt atteint, le bot Telegram demande jusqu'à quel niveau continuer :
 répondre un niveau (35), « non » (rester à l'arrêt) ou « illimité ». La réponse
-est lue au passage suivant du cron.
+est lue au passage suivant du cron. À l'arrêt, le script fait quand même un
+combat par jour pour garder la série (streak).
 
 Cron (toutes les 10 min pour lire vite les réponses Telegram ; git pull récupère
 la dernière version du dépôt ; flock évite deux lancements en même temps) :
@@ -38,6 +39,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 API = "https://leekwars.com/api/"
 POLL_INTERVAL = 2
@@ -319,8 +322,11 @@ def main():
 
     available = lw.get("garden/get")["garden"]["fights"]
     count = min(args.count or available, available)
+    fight_stop_level = stop_level
     if stop_level and leek["level"] >= stop_level:
-        count = 0
+        # À l'arrêt : un seul combat par jour pour garder la série (streak)
+        count = 1 if available and state.get("fight_day") != leekwars_day() else 0
+        fight_stop_level = None
     print(f"Fermier {farmer['name']} | poireau {leek['name']} (niv. {leek['level']}"
           + (f", arrêt au niv. {stop_level}" if stop_level else "") + ") | "
           f"{available} combats dispo -> {count} à lancer, {args.jobs} en parallèle")
@@ -334,7 +340,7 @@ def main():
     lock = threading.Lock()
     done = 0
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [pool.submit(run_fight, lw, leek["id"], args.strategy, lock, stop_level)
+        futures = [pool.submit(run_fight, lw, leek["id"], args.strategy, lock, fight_stop_level)
                    for _ in range(count)]
         try:
             for fut in as_completed(futures):
@@ -367,8 +373,15 @@ def main():
     print(f"\nBilan : {stats['victoire']} V / {stats['defaite']} D / {stats['egalite']} N "
           f"({ratio} de victoires), {stats['erreur']} erreurs")
 
+    if played:
+        state["fight_day"] = leekwars_day()
     leeks = lw.get("farmer/get-from-token")["farmer"]["leeks"]
     finish(state, leeks[str(leek["id"])], stop_level)
+
+
+def leekwars_day():
+    # Les combats du jour se rechargent à minuit, heure de Paris
+    return datetime.now(ZoneInfo("Europe/Paris")).date().isoformat()
 
 
 def finish(state, leek, stop_level):
