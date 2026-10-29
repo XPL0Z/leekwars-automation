@@ -1,0 +1,7 @@
+.env
+.state.json
+.lock
+combats.log
+__pycache__/
+.sphinxconfig
+.sphinxignore
