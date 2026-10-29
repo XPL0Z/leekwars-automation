@@ -21,8 +21,9 @@ Une fois l'arrêt atteint, le bot Telegram demande jusqu'à quel niveau continue
 répondre un niveau (35), « non » (rester à l'arrêt) ou « illimité ». La réponse
 est lue au passage suivant du cron.
 
-Cron (toutes les 10 min pour lire vite les réponses Telegram ; flock évite deux lancements en même temps) :
-  */10 * * * * cd ~/dev/leekwars && flock -n .lock python3 combats.py >> combats.log 2>&1
+Cron (toutes les 10 min pour lire vite les réponses Telegram ; git pull récupère
+la dernière version du dépôt ; flock évite deux lancements en même temps) :
+  */10 * * * * cd ~/dev/leekwars && flock -n .lock sh -c 'git pull --ff-only -q; python3 combats.py' >> combats.log 2>&1
 """
 
 import argparse
